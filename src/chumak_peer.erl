@@ -31,6 +31,7 @@
                           {ready, map()}.
 -record(state, {
           step=waiting_ready  :: peer_step(),
+          protocol            :: transport(),
           host                :: nil | string(),
           port                :: nil | number(),
           conn_side           :: server | client,
@@ -62,12 +63,13 @@
               Resource::term(),
               Opts::peer_opts()) ->
                      {ok, Pid::pid()} | {error, Reason::term()}.
-connect(Type, tcp, Host, Port, Resource, Opts)
+connect(Type, Protocol, Host, Port, Resource, Opts)
   when is_atom(Type),
-       is_list(Host),
+       is_atom(Protocol),
+       is_list(Host) or is_tuple(Host),
        is_integer(Port),
        is_list(Resource) ->
-    gen_server:start_link(?MODULE, {connect, Type, Host, Port, Resource, Opts, self()}, []).
+    gen_server:start_link(?MODULE, {connect, Type, Protocol, Host, Port, Resource, Opts, self()}, []).
 
 connect(Type, Protocol, Host, Port) ->
     connect(Type, Protocol, Host, Port, []).
@@ -124,10 +126,10 @@ close(PeerPid) ->
 %% gen_server implementation
 %% @hidden
 %% connect into peer by passing
-init({connect, Type, Host, Port, Resource, Opts, ParentPid}) ->
+init({connect, Type, Protocol, Host, Port, Resource, Opts, ParentPid}) ->
     %% the first job of this gen_server is connect
     gen_server:cast(self(), connect),
-    State = pending_connect_state(Type, Host, Port, Resource, Opts, ParentPid),
+    State = pending_connect_state(Type, Protocol, Host, Port, Resource, Opts, ParentPid),
     {ok, State};
 
 init({accept, Type, SocketPid, Opts, ParentPid}) ->
@@ -254,9 +256,12 @@ send_data(Data, #state{socket = Socket} = State) ->
     end,
     {noreply, State}.
 
-try_connect(#state{host=Host, port=Port, parent_pid=ParentPid, 
+connect_socket_opts(ipc) -> ?SOCKET_OPTS([]);
+connect_socket_opts(tcp) -> ?SOCKET_OPTS([local]).
+
+try_connect(#state{protocol=Protocol, host=Host, port=Port, parent_pid=ParentPid,
                    socket=OldSocketPid, security_data = CurveOptions}=State) ->
-    case gen_tcp:connect(Host, Port, ?SOCKET_OPTS([])) of 
+    case gen_tcp:connect(Host, Port, connect_socket_opts(Protocol)) of
         {ok, SocketPid} -> 
             case OldSocketPid of
                 nil ->
@@ -273,6 +278,7 @@ try_connect(#state{host=Host, port=Port, parent_pid=ParentPid,
 
         {error, Reason} ->
             error_logger:error_report([
+                                       {protocol, Protocol},
                                        {host, Host},
                                        {port, Port},
                                        connection_error,
@@ -473,10 +479,11 @@ validate_peer_socket_type(#state{type=SocketType} = State,
     end.
 
 
-pending_connect_state(Type, Host, Port, Resource, Opts, ParentPid) ->
+pending_connect_state(Type, Protocol, Host, Port, Resource, Opts, ParentPid) ->
     State = #state{
                type=Type,
                parent_pid=ParentPid,
+               protocol=Protocol,
                host=Host,
                port=Port,
                resource=Resource,

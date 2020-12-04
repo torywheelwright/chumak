@@ -6,18 +6,15 @@
 -module(chumak_bind).
 -include("chumak.hrl").
 
--export([start_link/2, listener/2]).
+-export([start_link/1, start_link/2, listener/2]).
 
 -spec start_link(Host::string(), Port::number()) -> {ok, BindPid::pid()} | {error, Reason::term()}.
 start_link(Host, Port) ->
-    ParentPid = self(),
-
     case inet:getaddr(Host, inet) of
         {ok, Addr} ->
-            case gen_tcp:listen(Port, ?SOCKET_OPTS([{ip, Addr}])) of
+            case bind(Port, Addr) of
                 {ok, ListenSocket} ->
-                    Pid = spawn_link(?MODULE, listener, [ListenSocket, ParentPid]),
-                    {ok, Pid};
+                    {ok, ListenSocket};
                 {error, Reason} ->
                     error_logger:error_report([
                                                bind_error,
@@ -30,7 +27,7 @@ start_link(Host, Port) ->
                     {error, Reason}
             end;
 
-        {error, IpReason} ->
+      {error, IpReason} ->
             error_logger:error_report([
                                        bind_error,
                                        {host, Host},
@@ -40,6 +37,31 @@ start_link(Host, Port) ->
             {error, IpReason}
     end.
 
+-spec start_link(Path::string()) -> {ok, BindPid::pid()} | {error, Reason::term()}.
+start_link(Path) ->
+    case bind(0, {local, Path}) of
+        {ok, ListenSocket} ->
+            {ok, ListenSocket};
+        {error, Reason} ->
+            error_logger:error_report([
+                                       bind_error,
+                                       {path, Path},
+                                       listen_error,
+                                       {error, Reason}
+                                      ]),
+            {error, Reason}
+    end.
+
+bind(Port, Host) ->
+    ParentPid = self(),
+
+    case gen_tcp:listen(Port, ?SOCKET_OPTS([{ip, Host}])) of
+        {ok, ListenSocket} ->
+            Pid = spawn_link(?MODULE, listener, [ListenSocket, ParentPid]),
+            {ok, Pid};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 listener(ListenSocket, ParentPid) ->
     try

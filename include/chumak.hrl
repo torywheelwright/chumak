@@ -6,7 +6,10 @@
 
 -export_type([transport/0, socket_type/0]).
 
--type transport() :: tcp.
+-type transport_with_port() :: tcp.
+-type transport_without_port() :: ipc.
+-type transport() :: transport_with_port | transport_without_port.
+
 -type socket_type() :: req | rep |
                      dealer | router |
                      pub | xpub |
@@ -21,7 +24,7 @@
                           curve_secretkey  | %% binary()
                           curve_serverkey  | %% binary()
                           curve_clientkeys.  %% [binary() | z85_key()]
-                          
+
 -type security_mechanism() :: null |
                               curve.
 

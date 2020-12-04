@@ -11,7 +11,7 @@
 -behaviour(application).
 
 -export([start/2, stop/1]).
--export([socket/1, socket/2, connect/4, connect/5, bind/4, send/2, recv/1, send_multipart/2, recv_multipart/1,
+-export([socket/1, socket/2, connect/4, connect/5, connect_ipc/3, connect_ipc/2, bind/4, bind_ipc/2, send/2, recv/1, send_multipart/2, recv_multipart/1,
          unblock/1,
          set_socket_option/3,
          cancel/2, subscribe/2,
@@ -121,6 +121,20 @@ connect(SocketPid, Transport, Host, Port, Resource)
 connect(SocketPid, Transport, Host, Port) ->
     connect(SocketPid, Transport, Host, Port, "").
 
+-spec connect_ipc(SocketPid::pid(), Path::string(), Resource::term()) ->
+    {ok, PeerPid::pid()} | {error, Reason::atom()}.
+connect_ipc(SocketPid, Path, Resource)
+  when is_pid(SocketPid),
+       is_list(Path),
+       is_list(Resource) ->
+
+    gen_server:call(SocketPid, {connect, ipc, {local, Path}, 0, Resource}).
+
+-spec connect_ipc(SocketPid::pid(), Path::string()) ->
+    {ok, PeerPid::pid()} | {error, Reason::atom()}.
+connect_ipc(SocketPid, Path) ->
+  connect_ipc(SocketPid, Path, "").
+
 %% @doc bind in a host and port
 -spec bind(SocketPid::pid(), Transport::transport(), Host::string(), Port::integer()) ->
     {ok, pid()} | {error, term()}.
@@ -133,6 +147,14 @@ bind(SocketPid, Transport, Host, Port)
 
     gen_server:call(SocketPid, {bind, Transport, Host, Port}).
 
+-spec bind_ipc(SocketPid::pid(), Path::string()) ->
+    {ok, pid()} | {error, term()}.
+
+bind_ipc(SocketPid, Path)
+  when is_pid(SocketPid),
+       is_list(Path) ->
+
+    gen_server:call(SocketPid, {bind, ipc, Path}).
 
 %% @doc send a message for peers
 -spec send(SocketPid::pid(), Data::binary()) -> ok.
